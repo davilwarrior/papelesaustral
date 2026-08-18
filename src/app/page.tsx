@@ -1,69 +1,45 @@
-import Image from "next/image";
+import { getAudiences } from "@/application/use-cases/get-audiences";
+import { getCategories } from "@/application/use-cases/get-categories";
+import { getCompanyValues } from "@/application/use-cases/get-company-values";
+import { getSiteConfig } from "@/application/use-cases/get-site-config";
+import { buildWhatsAppQuoteUrl } from "@/application/use-cases/build-whatsapp-quote-url";
+import {
+  catalogRepository,
+  siteConfigRepository,
+} from "@/infrastructure/container";
+import { Footer } from "@/presentation/components/layout/footer";
+import { Header } from "@/presentation/components/layout/header";
+import { Audiences } from "@/presentation/components/sections/audiences";
+import { Categories } from "@/presentation/components/sections/categories";
+import { Contact } from "@/presentation/components/sections/contact";
+import { Hero } from "@/presentation/components/sections/hero";
+import { Logistics } from "@/presentation/components/sections/logistics";
+import { RebrandBanner } from "@/presentation/components/sections/rebrand-banner";
+import { Values } from "@/presentation/components/sections/values";
 
-export default function Home() {
+export default async function HomePage() {
+  const [site, categories, audiences, values] = await Promise.all([
+    getSiteConfig(siteConfigRepository),
+    getCategories(catalogRepository),
+    getAudiences(catalogRepository),
+    getCompanyValues(catalogRepository),
+  ]);
+
+  const whatsappUrl = buildWhatsAppQuoteUrl(site.contact.whatsappNumber);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <>
+      <Header whatsappUrl={whatsappUrl} />
+      <main>
+        <Hero site={site} />
+        <RebrandBanner formerName={site.formerName} name={site.name} />
+        <Categories categories={categories} />
+        <Audiences audiences={audiences} />
+        <Values values={values} />
+        <Logistics />
+        <Contact site={site} />
       </main>
-    </div>
+      <Footer site={site} />
+    </>
   );
 }

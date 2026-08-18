@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Papeles Austral — papelesaustral.com
 
-## Getting Started
+Sitio web de **Papeles Austral** (antes PCC Austral): proveedor especializado de
+papeles, cartulinas y cartones para el sector gráfico del Austro ecuatoriano.
 
-First, run the development server:
+> Territorio de marca: *"El material correcto, cuando lo necesitas."*
+
+## Stack
+
+- **Next.js 16** (App Router) + **React 19** + **TypeScript**
+- **Tailwind CSS 4** con tokens de marca en `src/app/globals.css`
+- **lucide-react** para iconografía
+- Despliegue objetivo: **Vercel**
+
+## Comandos
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev    # desarrollo
+npm run build  # build de producción
+npm run start  # servir build
+npm run lint   # ESLint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Arquitectura (Clean Architecture)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+src/
+├── domain/           Entidades e interfaces de repositorio (sin dependencias)
+├── application/      Casos de uso (orquestan dominio + repositorios)
+├── infrastructure/   Datos estáticos, repositorios concretos y container.ts
+│                     (composition root: cambiar aquí StaticCatalogRepository
+│                      por una implementación HTTP/DB cuando exista el backend)
+├── presentation/     Componentes UI, secciones, layout y lib/ (cn)
+└── app/              Rutas, metadata SEO, sitemap, robots, manifest, OG image
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Datos del negocio
 
-## Learn More
+Los textos de contacto, nombre legal y tagline viven en un único archivo:
+`src/infrastructure/config/site-config.data.ts` (hoy con **placeholders** —
+reemplazar WhatsApp, correo, dirección y horario por los datos reales).
 
-To learn more about Next.js, take a look at the following resources:
+## Assets de marca
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `brand/` — material original (logo, línea gráfica, planificación estratégica,
+  mockup del futuro sistema de inventario).
+- `public/images/` — assets servidos: logo transparente (`logo.png`,
+  `logo-white.png`), hero y foto de logística.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Roadmap
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Fase 1 — Landing page** (este estado) ✅
+2. **Fase 2** — Catálogo público de productos con buscador y filtros.
+3. **Fase 3** — Sistema de inventario y gestión (`/admin`, auth, base de datos).

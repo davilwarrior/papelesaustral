@@ -1,26 +1,114 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* Tipografía */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif,
+    system-ui, sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Azul marino de marca (base #0B1F3A, extraído del logo) */
+  --color-navy-50: #eef2f8;
+  --color-navy-100: #d8e1ef;
+  --color-navy-200: #b0c2de;
+  --color-navy-300: #7e99c4;
+  --color-navy-400: #4f6fa6;
+  --color-navy-500: #2f4e80;
+  --color-navy-600: #1e3a66;
+  --color-navy-700: #142c52;
+  --color-navy-800: #0b1f3a;
+  --color-navy-900: #08172b;
+  --color-navy-950: #050f1e;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* Verde de marca (base #3E7A3E, acento del logo) */
+  --color-forest-50: #eff6ef;
+  --color-forest-100: #daeadb;
+  --color-forest-200: #b5d5b7;
+  --color-forest-300: #8abd8d;
+  --color-forest-400: #5fa163;
+  --color-forest-500: #3e7a3e;
+  --color-forest-600: #33652f;
+  --color-forest-700: #295127;
+  --color-forest-800: #1e3c1d;
+  --color-forest-900: #142715;
+  --color-forest-950: #0b150b;
+
+  /* Neutros cálidos "papel" */
+  --color-paper-50: #fbfbfa;
+  --color-paper-100: #f7f6f3;
+  --color-paper-200: #efede7;
+  --color-paper-300: #e3e0d6;
+
+  /* Animaciones */
+  --animate-fade-up: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-marquee: marquee 32s linear infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-paper-100);
+  color: var(--color-navy-950);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: var(--color-forest-500);
+  color: white;
+}
+
+/* Reveal on scroll: visible por defecto si no hay JS */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Textura sutil de grano para secciones oscuras */
+.texture-grain {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.045) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
 }
