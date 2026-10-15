@@ -5,12 +5,26 @@ import { runCatalogSync } from "@/infrastructure/catalog-sync";
 
 export const maxDuration = 60;
 
-function hasValidToken(request: Request, secret: string | undefined): boolean {
-  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!secret || !token) return false;
+/** Quita espacios y comillas que se cuelan al copiar el valor desde el .env. */
+function cleanSecret(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+}
+
+function hasValidToken(request: Request, secretName: string): boolean {
+  const secret = cleanSecret(process.env[secretName]);
+  const token = cleanSecret(request.headers.get("authorization")?.replace(/^\s*Bearer\s+/i, ""));
   const a = Buffer.from(token);
   const b = Buffer.from(secret);
-  return a.length === b.length && timingSafeEqual(a, b);
+  const valid = secret !== "" && a.length === b.length && timingSafeEqual(a, b);
+  if (!valid) {
+    // Solo longitudes: suficiente para diagnosticar sin exponer el secreto.
+    console.warn(`[sync] 401: ${secretName}`, {
+      secretConfigured: secret !== "",
+      secretLength: secret.length,
+      tokenLength: token.length,
+    });
+  }
+  return valid;
 }
 
 async function handle(trigger: SyncTrigger) {
@@ -35,7 +49,7 @@ async function handle(trigger: SyncTrigger) {
 
 /** Webhook que llama Apps Script cuando se edita el Sheet. */
 export async function POST(request: Request) {
-  if (!hasValidToken(request, process.env.SYNC_WEBHOOK_SECRET)) {
+  if (!hasValidToken(request, "SYNC_WEBHOOK_SECRET")) {
     return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   return handle("webhook");
@@ -43,7 +57,7 @@ export async function POST(request: Request) {
 
 /** Cron diario de Vercel (envía Authorization: Bearer CRON_SECRET). */
 export async function GET(request: Request) {
-  if (!hasValidToken(request, process.env.CRON_SECRET)) {
+  if (!hasValidToken(request, "CRON_SECRET")) {
     return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   return handle("cron");
