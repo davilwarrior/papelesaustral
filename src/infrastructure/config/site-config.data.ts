@@ -11,8 +11,8 @@ export const siteConfigData: SiteConfig = {
   description:
     "Proveedor especializado de papeles, cartulinas y cartones para imprentas, diseñadores, editoriales, papelerías y empresas de packaging en el Austro ecuatoriano.",
   contact: {
-    whatsappNumber: "593999999999",
-    whatsappDisplay: "+593 99 999 9999",
+    whatsappNumber: "593998405629",
+    whatsappDisplay: "+593 99 840 5629",
     email: "ventas@papelesaustral.com",
     address: "Av. de las Américas 00-00",
     city: "Cuenca, Ecuador",
