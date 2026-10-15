@@ -50,11 +50,22 @@ function sincronizarAhora() {
   SpreadsheetApp.getUi().alert(res);
 }
 
+/** Lee una propiedad del script; falla con un mensaje claro si no existe. */
+function propiedad(nombre) {
+  var valor = PropertiesService.getScriptProperties().getProperty(nombre);
+  if (!valor || !valor.trim()) {
+    throw new Error(
+      'Falta la propiedad "' + nombre + '" en Configuración del proyecto > Propiedades del script. ' +
+        "Existen: " + PropertiesService.getScriptProperties().getKeys().join(", "),
+    );
+  }
+  return valor.trim();
+}
+
 function sincronizar() {
-  var props = PropertiesService.getScriptProperties();
-  var response = UrlFetchApp.fetch(props.getProperty("SYNC_URL"), {
+  var response = UrlFetchApp.fetch(propiedad("SYNC_URL"), {
     method: "post",
-    headers: { Authorization: "Bearer " + props.getProperty("SYNC_SECRET") },
+    headers: { Authorization: "Bearer " + propiedad("SYNC_SECRET") },
     muteHttpExceptions: true,
   });
   var body = JSON.parse(response.getContentText() || "{}");
