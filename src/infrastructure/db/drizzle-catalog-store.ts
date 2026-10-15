@@ -56,61 +56,80 @@ export class DrizzleCatalogStore implements CatalogStore {
       updatedAt: now,
     }));
 
+    const upsertLines = this.db
+      .insert(productLines)
+      .values(lineRows)
+      .onConflictDoUpdate({
+        target: productLines.key,
+        set: {
+          sourceName: excluded("source_name"),
+          name: excluded("name"),
+          familyId: excluded("family_id"),
+          sortOrder: excluded("sort_order"),
+          updatedAt: now,
+        },
+      });
+
+    // Si la pestaña TAGS queda vacía, solo se borran los tags (values([]) no es válido).
+    const removeOldTags =
+      tagRows.length > 0
+        ? this.db.delete(tags).where(notInArray(tags.name, tagRows.map((t) => t.name)))
+        : this.db.delete(tags);
+    const tagStatements =
+      tagRows.length > 0
+        ? [
+            removeOldTags,
+            this.db
+              .insert(tags)
+              .values(tagRows)
+              .onConflictDoUpdate({
+                target: tags.name,
+                set: {
+                  description: excluded("description"),
+                  sortOrder: excluded("sort_order"),
+                  updatedAt: now,
+                },
+              }),
+          ]
+        : [removeOldTags];
+
+    const upsertProducts = this.db
+      .insert(products)
+      .values(productRows)
+      .onConflictDoUpdate({
+        target: products.code,
+        set: {
+          description: excluded("description"),
+          lineKey: excluded("line_key"),
+          brand: excluded("brand"),
+          grammage: excluded("grammage"),
+          size: excluded("size"),
+          caliper: excluded("caliper"),
+          thicknessMm: excluded("thickness_mm"),
+          sheetsPerPack: excluded("sheets_per_pack"),
+          pricePerPack: excluded("price_per_pack"),
+          tags: excluded("tags"),
+          active: true,
+          sourceRow: excluded("source_row"),
+          lastSyncedAt: now,
+          updatedAt: now,
+        },
+      });
+
+    const deactivateMissing = this.db
+      .update(products)
+      .set({ active: false, updatedAt: now })
+      .where(and(eq(products.active, true), notInArray(products.code, codes)))
+      .returning({ code: products.code });
+
     // neon-http no tiene transacciones interactivas: batch() ejecuta todo en una sola transacción.
-    const [, , , , deactivated] = await this.db.batch([
-      this.db
-        .insert(productLines)
-        .values(lineRows)
-        .onConflictDoUpdate({
-          target: productLines.key,
-          set: {
-            sourceName: excluded("source_name"),
-            name: excluded("name"),
-            familyId: excluded("family_id"),
-            sortOrder: excluded("sort_order"),
-            updatedAt: now,
-          },
-        }),
-      this.db
-        .insert(tags)
-        .values(tagRows)
-        .onConflictDoUpdate({
-          target: tags.name,
-          set: {
-            description: excluded("description"),
-            sortOrder: excluded("sort_order"),
-            updatedAt: now,
-          },
-        }),
-      this.db.delete(tags).where(notInArray(tags.name, tagRows.map((t) => t.name))),
-      this.db
-        .insert(products)
-        .values(productRows)
-        .onConflictDoUpdate({
-          target: products.code,
-          set: {
-            description: excluded("description"),
-            lineKey: excluded("line_key"),
-            brand: excluded("brand"),
-            grammage: excluded("grammage"),
-            size: excluded("size"),
-            caliper: excluded("caliper"),
-            thicknessMm: excluded("thickness_mm"),
-            sheetsPerPack: excluded("sheets_per_pack"),
-            pricePerPack: excluded("price_per_pack"),
-            tags: excluded("tags"),
-            active: true,
-            sourceRow: excluded("source_row"),
-            lastSyncedAt: now,
-            updatedAt: now,
-          },
-        }),
-      this.db
-        .update(products)
-        .set({ active: false, updatedAt: now })
-        .where(and(eq(products.active, true), notInArray(products.code, codes)))
-        .returning({ code: products.code }),
+    const results = await this.db.batch([
+      upsertLines,
+      ...tagStatements,
+      upsertProducts,
+      deactivateMissing,
     ]);
+    const deactivated = results[results.length - 1] as { code: string }[];
 
     return { productsSynced: productRows.length, productsDeactivated: deactivated.length };
   }
