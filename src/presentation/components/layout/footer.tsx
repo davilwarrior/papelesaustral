@@ -6,11 +6,12 @@ import { buildWhatsAppQuoteUrl } from "@/application/use-cases/build-whatsapp-qu
 import { Container } from "../ui/container";
 
 const navItems = [
-  { href: "#productos", label: "Productos" },
-  { href: "#quienes", label: "Para quién" },
-  { href: "#nosotros", label: "Nosotros" },
-  { href: "#logistica", label: "Logística" },
-  { href: "#contacto", label: "Contacto" },
+  { href: "/#productos", label: "Productos" },
+  { href: "/cotizador", label: "Cotizador" },
+  { href: "/#quienes", label: "Para quién" },
+  { href: "/#nosotros", label: "Nosotros" },
+  { href: "/#logistica", label: "Logística" },
+  { href: "/#contacto", label: "Contacto" },
 ];
 
 interface FooterProps {

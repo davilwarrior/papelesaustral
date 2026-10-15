@@ -6,10 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:connections": "node --env-file=.env scripts/check-connections.mjs",
+    "sync:dry-run": "tsx --env-file=.env --tsconfig tsconfig.json scripts/sync-dry-run.mts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "sync": "tsx --env-file=.env --tsconfig tsconfig.json scripts/sync.mts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.4",
+    "google-auth-library": "^11.3.0",
     "lucide-react": "^1.32.0",
     "next": "16.3.1",
     "react": "19.2.8",
@@ -21,9 +30,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

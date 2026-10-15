@@ -7,18 +7,21 @@ import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 
 const navItems = [
-  { href: "#productos", label: "Productos" },
-  { href: "#quienes", label: "Para quién" },
-  { href: "#nosotros", label: "Nosotros" },
-  { href: "#logistica", label: "Logística" },
-  { href: "#contacto", label: "Contacto" },
+  { href: "/#productos", label: "Productos" },
+  { href: "/cotizador", label: "Cotizador" },
+  { href: "/#quienes", label: "Para quién" },
+  { href: "/#nosotros", label: "Nosotros" },
+  { href: "/#logistica", label: "Logística" },
+  { href: "/#contacto", label: "Contacto" },
 ];
 
 interface HeaderProps {
   whatsappUrl: string;
+  /** Fondo claro desde el inicio, para páginas sin hero oscuro. */
+  alwaysSolid?: boolean;
 }
 
-export function Header({ whatsappUrl }: HeaderProps) {
+export function Header({ whatsappUrl, alwaysSolid = false }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -29,7 +32,7 @@ export function Header({ whatsappUrl }: HeaderProps) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const solid = scrolled || open;
+  const solid = alwaysSolid || scrolled || open;
 
   return (
     <header

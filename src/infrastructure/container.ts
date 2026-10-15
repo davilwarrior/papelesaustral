@@ -1,5 +1,7 @@
 import type { CatalogRepository } from "@/domain/repositories/catalog-repository";
+import type { ProductRepository } from "@/domain/repositories/product-repository";
 import type { SiteConfigRepository } from "@/domain/repositories/site-config-repository";
+import { DrizzleProductRepository } from "./repositories/drizzle-product-repository";
 import { StaticCatalogRepository } from "./repositories/static-catalog-repository";
 import { StaticSiteConfigRepository } from "./repositories/static-site-config-repository";
 
@@ -14,3 +16,7 @@ export const catalogRepository: CatalogRepository =
 
 export const siteConfigRepository: SiteConfigRepository =
   new StaticSiteConfigRepository();
+
+/** Catálogo de productos sincronizado desde el Google Sheet a Neon. */
+export const productRepository: ProductRepository =
+  new DrizzleProductRepository();
