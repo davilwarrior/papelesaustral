@@ -40,6 +40,18 @@ Los textos de contacto, nombre legal y tagline viven en un único archivo:
 `src/infrastructure/config/site-config.data.ts` (hoy con **placeholders** —
 reemplazar WhatsApp, correo, dirección y horario por los datos reales).
 
+## Asistente de chat (OpenAI)
+
+Burbuja "¿Te ayudo?" en todas las páginas (`presentation/components/chat/`).
+Responde dudas y arma pedidos sobre el **mismo carrito del cotizador**; el envío
+sigue siendo por WhatsApp al asesor.
+
+- Endpoint: `src/app/api/chat/route.ts` (AI SDK + `gpt-5.4-mini`, cambiable con `OPENAI_CHAT_MODEL`).
+- Herramientas y prompt: `src/application/chat/`. Los precios y totales salen
+  siempre del catálogo de Neon, nunca del modelo.
+- Requiere `OPENAI_API_KEY` en `.env` y en Vercel. Configura un límite de gasto
+  en platform.openai.com → Settings → Limits.
+
 ## Assets de marca
 
 - `brand/` — material original (logo, línea gráfica, planificación estratégica,

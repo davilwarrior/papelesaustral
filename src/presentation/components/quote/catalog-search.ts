@@ -1,4 +1,7 @@
+import { normalizeText } from "@/application/use-cases/search-products";
 import type { Product, ProductFamilyId } from "@/domain/entities/product";
+
+export { normalizeText, searchText } from "@/application/use-cases/search-products";
 
 export interface CatalogFilters {
   readonly query: string;
@@ -27,30 +30,6 @@ export const GRAMMAGE_RANGES = [
   { id: "250-349", label: "250 a 349 g" },
   { id: "350-99999", label: "350 g o más" },
 ] as const;
-
-export function normalizeText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-}
-
-export function searchText(product: Product): string {
-  return normalizeText(
-    [
-      product.code,
-      product.description,
-      product.brand,
-      product.line.name,
-      product.grammage && `${product.grammage}gr ${product.grammage}g`,
-      product.size,
-      product.caliper && `calibre ${product.caliper}`,
-      ...product.tags,
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
-}
 
 export function matchesFilters(
   product: Product,

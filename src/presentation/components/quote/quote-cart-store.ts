@@ -44,6 +44,10 @@ function subscribe(listener: () => void) {
 }
 
 export const quoteCart = {
+  /** Pedido actual fuera de React (por ejemplo, para enviarlo al asistente). */
+  snapshot(): QuoteCart {
+    return read();
+  },
   setPacks(code: string, packs: number) {
     const next: Record<string, number> = { ...read() };
     const value = Math.max(0, Math.min(9999, Math.round(packs || 0)));

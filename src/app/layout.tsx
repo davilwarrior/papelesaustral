@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { getSiteConfig } from "@/application/use-cases/get-site-config";
 import { siteConfigRepository } from "@/infrastructure/container";
+import { ChatWidget } from "@/presentation/components/chat/chat-widget";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -52,13 +53,18 @@ export const viewport: Viewport = {
   themeColor: "#0b1f3a",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const site = await getSiteConfig(siteConfigRepository);
+
   return (
     <html
       lang="es"
       className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {children}
+        <ChatWidget whatsappNumber={site.contact.whatsappNumber} />
+      </body>
     </html>
   );
 }
