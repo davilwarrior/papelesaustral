@@ -12,6 +12,7 @@ import {
   searchText,
   type CatalogFilters,
 } from "./catalog-search";
+import { PriceListDownloadMenu } from "../catalog/price-list-download";
 import { ProductTable, type ProductGroup } from "./product-table";
 import { QuoteCart } from "./quote-cart";
 import { useQuoteCart } from "./quote-cart-store";
@@ -118,10 +119,13 @@ export function QuoteTool({ products, tags, whatsappNumber, updatedAtLabel }: Qu
                 Busca por gramaje, medida, marca o uso y arma tu pedido por paquetes.
               </p>
             </div>
-            <p className="text-xs text-navy-800/50">
-              {products.length} productos · Precios en USD
-              {updatedAtLabel && ` · Actualizados el ${updatedAtLabel}`}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <p className="text-xs text-navy-800/50">
+                {products.length} productos · Precios en USD
+                {updatedAtLabel && ` · Actualizados el ${updatedAtLabel}`}
+              </p>
+              <PriceListDownloadMenu />
+            </div>
           </div>
 
           <div className="relative mt-4">

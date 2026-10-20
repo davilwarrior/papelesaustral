@@ -8,6 +8,7 @@ import { Container } from "../ui/container";
 const navItems = [
   { href: "/#productos", label: "Productos" },
   { href: "/cotizador", label: "Cotizador" },
+  { href: "/#lista-de-precios", label: "Lista de precios" },
   { href: "/#quienes", label: "Para quién" },
   { href: "/#nosotros", label: "Nosotros" },
   { href: "/#logistica", label: "Logística" },

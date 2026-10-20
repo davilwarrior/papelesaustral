@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { SyncTrigger } from "@/application/catalog-sync/sync-catalog";
 import { runCatalogSync } from "@/infrastructure/catalog-sync";
+import { PRICE_LIST_PATHS } from "@/infrastructure/price-list";
 
 export const maxDuration = 60;
 
@@ -30,7 +31,9 @@ function hasValidToken(request: Request, secretName: string): boolean {
 async function handle(trigger: SyncTrigger) {
   try {
     const result = await runCatalogSync(trigger);
-    revalidatePath("/cotizador");
+    for (const path of ["/", "/cotizador", ...Object.values(PRICE_LIST_PATHS)]) {
+      revalidatePath(path);
+    }
     return Response.json({
       ok: true,
       runId: result.runId,

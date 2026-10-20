@@ -1,4 +1,4 @@
-import { ArrowRight, BadgeCheck, MessageCircle, Truck } from "lucide-react";
+import { ArrowRight, BadgeCheck, MessageCircle, Truck, FileDown } from "lucide-react";
 import Image from "next/image";
 import type { SiteConfig } from "@/domain/entities/site-config";
 import { buildWhatsAppQuoteUrl } from "@/application/use-cases/build-whatsapp-quote-url";
@@ -67,6 +67,17 @@ export function Hero({ site }: HeroProps) {
               <ArrowRight className="size-5" aria-hidden />
             </ButtonLink>
           </div>
+
+          <a
+            href="/lista-de-precios.pdf"
+            target="_blank"
+            rel="noopener"
+            className="animate-fade-up mt-5 inline-flex items-center gap-2 text-sm font-semibold text-navy-100/80 underline decoration-white/25 underline-offset-4 transition-colors hover:text-white hover:decoration-white"
+            style={{ animationDelay: "420ms" }}
+          >
+            <FileDown className="size-4 text-forest-300" aria-hidden />
+            Descargar lista de precios en PDF
+          </a>
 
           <dl
             className="animate-fade-up mt-12 flex flex-wrap gap-x-10 gap-y-6"
