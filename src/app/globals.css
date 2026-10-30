@@ -112,3 +112,58 @@ body {
   );
   background-size: 22px 22px;
 }
+
+/* Ficha de producto: entrada suave del modal y de cada cambio de ficha */
+.product-dialog[open] {
+  animation: dialog-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.product-dialog[open]::backdrop {
+  animation: backdrop-in 0.3s ease-out;
+}
+
+.product-dialog-image {
+  animation: image-in 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.product-dialog-body > * {
+  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.product-dialog-body > :nth-child(n + 3) {
+  animation-delay: 60ms;
+}
+
+.product-dialog-body > :nth-child(n + 5) {
+  animation-delay: 120ms;
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes image-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-dialog[open],
+  .product-dialog[open]::backdrop,
+  .product-dialog-image,
+  .product-dialog-body > *,
+  .animate-fade-up {
+    animation: none;
+  }
+}

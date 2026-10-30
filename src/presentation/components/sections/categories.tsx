@@ -1,4 +1,6 @@
+import { ArrowRight } from "lucide-react";
 import type { Category } from "@/domain/entities/category";
+import { ButtonLink } from "../ui/button";
 import { Container } from "../ui/container";
 import { Icon } from "../ui/icon";
 import { Reveal } from "../ui/reveal";
@@ -56,6 +58,13 @@ export function Categories({ categories }: CategoriesProps) {
             </Reveal>
           ))}
         </div>
+
+        <Reveal className="mt-12 flex justify-center">
+          <ButtonLink href="/productos" variant="secondary" size="lg">
+            Ver todos los productos
+            <ArrowRight className="size-5" aria-hidden />
+          </ButtonLink>
+        </Reveal>
       </Container>
     </section>
   );

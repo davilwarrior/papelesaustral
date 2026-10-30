@@ -31,7 +31,7 @@ function hasValidToken(request: Request, secretName: string): boolean {
 async function handle(trigger: SyncTrigger) {
   try {
     const result = await runCatalogSync(trigger);
-    for (const path of ["/", "/cotizador", ...Object.values(PRICE_LIST_PATHS)]) {
+    for (const path of ["/", "/cotizador", "/productos", ...Object.values(PRICE_LIST_PATHS)]) {
       revalidatePath(path);
     }
     return Response.json({

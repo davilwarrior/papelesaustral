@@ -1,7 +1,7 @@
 "use client";
 
 import { ClipboardList, Search, X } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { calculateQuoteTotals, formatUsd } from "@/application/use-cases/build-quote-message";
 import { PRODUCT_FAMILIES, type Product, type ProductTag } from "@/domain/entities/product";
 import { cn } from "../../lib/cn";
@@ -51,6 +51,17 @@ export function QuoteTool({ products, tags, whatsappNumber, updatedAtLabel }: Qu
   const [cartOpen, setCartOpen] = useState(false);
   const deferredFilters = useDeferredValue(filters);
   const cart = useQuoteCart();
+
+  // /cotizador?q=... llega desde las fichas de /productos con la búsqueda lista.
+  useEffect(() => {
+    const fromUrl = () => {
+      const query = new URLSearchParams(window.location.search).get("q");
+      if (query) setFilters((current) => ({ ...current, query }));
+    };
+    fromUrl();
+    window.addEventListener("popstate", fromUrl);
+    return () => window.removeEventListener("popstate", fromUrl);
+  }, []);
 
   const indexed = useMemo(
     () => products.map((product) => ({ product, haystack: searchText(product) })),
