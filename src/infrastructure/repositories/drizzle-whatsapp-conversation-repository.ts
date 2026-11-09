@@ -45,7 +45,7 @@ export class DrizzleWhatsAppConversationRepository implements WhatsAppConversati
     return row?.id ?? null;
   }
 
-  async recentMessages(phone: string, limit: number): Promise<WhatsAppStoredMessage[]> {
+  async recentMessages(phone: string, limit: number, since: Date): Promise<WhatsAppStoredMessage[]> {
     const rows = await getDb()
       .select({
         id: whatsappMessages.id,
@@ -54,10 +54,14 @@ export class DrizzleWhatsAppConversationRepository implements WhatsAppConversati
         createdAt: whatsappMessages.createdAt,
       })
       .from(whatsappMessages)
-      .where(eq(whatsappMessages.phone, phone))
+      .where(and(eq(whatsappMessages.phone, phone), gte(whatsappMessages.createdAt, since)))
       .orderBy(desc(whatsappMessages.id))
       .limit(limit);
     return rows.reverse();
+  }
+
+  async updateMessageContent(id: number, content: string): Promise<void> {
+    await getDb().update(whatsappMessages).set({ content }).where(eq(whatsappMessages.id, id));
   }
 
   async lastUserMessageId(phone: string): Promise<number | null> {

@@ -43,6 +43,8 @@ const TRANSCRIBE_PROMPT =
 const PUBLIC_ORIGIN = process.env.PUBLIC_SITE_ORIGIN || "https://www.papelesaustral.com";
 /** Mensajes de historial que se envían al modelo. */
 const HISTORY_LIMIT = 24;
+/** Solo se usa el historial reciente: si el cliente vuelve días después, empieza una charla nueva. */
+const HISTORY_HOURS = 24;
 /** Freno contra abusos: por encima de esto el bot deja de responder a ese número durante la hora. */
 const MAX_USER_MESSAGES_PER_HOUR = 40;
 const FALLBACK_REPLY =
@@ -105,8 +107,13 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
     const id = await conversations.saveMessage(phone, {
       waMessageId: message.id,
       role: "user",
-      content: message.audioId ? await transcribeVoiceNote(message.audioId, message.text) : message.text,
+      content: message.text,
     });
+    // Se transcribe solo después de guardar, para no pagar dos veces si Kapso reintenta.
+    if (id !== null && message.audioId) {
+      const transcript = await transcribeVoiceNote(message.audioId);
+      if (transcript) await conversations.updateMessageContent(id, transcript);
+    }
     if (id !== null) {
       lastSavedId = id;
       lastMessageId = message.id;
@@ -143,12 +150,22 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
     await save(await sendWhatsAppText(phone, reply.handoff.orderSummary), reply.handoff.orderSummary);
   }
   if (reply.text) {
-    const waMessageId =
-      reply.buttons.length > 0
-        ? await sendWhatsAppButtons(phone, reply.text, reply.buttons)
-        : await sendWhatsAppText(phone, reply.text);
-    const buttons = reply.buttons.length > 0 ? `\n[Botones: ${reply.buttons.join(" | ")}]` : "";
-    await save(waMessageId, reply.text + buttons);
+    let buttons = reply.buttons;
+    let waMessageId: string | null;
+    try {
+      waMessageId =
+        buttons.length > 0
+          ? await sendWhatsAppButtons(phone, reply.text, buttons)
+          : await sendWhatsAppText(phone, reply.text);
+    } catch (error) {
+      if (buttons.length === 0) throw error;
+      // Si WhatsApp rechaza los botones, el cliente igual recibe la respuesta.
+      console.warn("[whatsapp] No se pudieron enviar los botones; se envía solo el texto", error);
+      buttons = [];
+      waMessageId = await sendWhatsAppText(phone, reply.text);
+    }
+    const buttonsNote = buttons.length > 0 ? `\n[Botones: ${buttons.join(" | ")}]` : "";
+    await save(waMessageId, reply.text + buttonsNote);
   }
   for (const format of reply.priceLists) {
     const filename = format === "pdf" ? "Lista de precios Papeles Austral.pdf" : "Lista de precios Papeles Austral.xlsx";
@@ -179,8 +196,8 @@ interface GeneratedReply {
   readonly buttons: readonly string[];
 }
 
-/** Transcribe una nota de voz; si falla, el modelo recibe el aviso de que llegó un audio. */
-async function transcribeVoiceNote(audioId: string, fallback: string): Promise<string> {
+/** Transcribe una nota de voz; si falla devuelve null y el modelo ve el aviso de que llegó un audio. */
+async function transcribeVoiceNote(audioId: string): Promise<string | null> {
   try {
     const { data } = await downloadWhatsAppMedia(audioId);
     const result = await transcribe({
@@ -190,10 +207,10 @@ async function transcribeVoiceNote(audioId: string, fallback: string): Promise<s
       providerOptions: { openai: { language: "es", responseFormat: "json", prompt: TRANSCRIBE_PROMPT } },
     });
     const text = result.text.trim();
-    return text ? `(Nota de voz) ${text}` : fallback;
+    return text ? `(Nota de voz) ${text}` : null;
   } catch (error) {
     console.warn("[whatsapp] No se pudo transcribir la nota de voz", error);
-    return fallback;
+    return null;
   }
 }
 
@@ -202,7 +219,7 @@ async function generateReply(conversation: WhatsAppConversation): Promise<Genera
     getSiteConfig(siteConfigRepository),
     loadCachedCatalog(),
     getCategories(catalogRepository),
-    conversations.recentMessages(conversation.phone, HISTORY_LIMIT),
+    conversations.recentMessages(conversation.phone, HISTORY_LIMIT, addHours(new Date(), -HISTORY_HOURS)),
   ]);
 
   const cart = sanitizeCart(conversation.cart, new Map(catalog.products.map((p) => [p.code, p])));

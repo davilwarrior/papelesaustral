@@ -35,8 +35,10 @@ export interface WhatsAppConversationRepository {
   getOrCreate(phone: string, contactName?: string | null): Promise<WhatsAppConversation>;
   /** Guarda el mensaje y devuelve su id, o null si ya estaba guardado (mensaje repetido). */
   saveMessage(phone: string, message: NewWhatsAppMessage): Promise<number | null>;
-  /** Últimos mensajes en orden cronológico. */
-  recentMessages(phone: string, limit: number): Promise<WhatsAppStoredMessage[]>;
+  /** Últimos mensajes desde una fecha, en orden cronológico. */
+  recentMessages(phone: string, limit: number, since: Date): Promise<WhatsAppStoredMessage[]>;
+  /** Reemplaza el texto de un mensaje (por ejemplo, con la transcripción de una nota de voz). */
+  updateMessageContent(id: number, content: string): Promise<void>;
   /** Id del último mensaje del cliente, para saber si llegó otro mientras se respondía. */
   lastUserMessageId(phone: string): Promise<number | null>;
   countUserMessagesSince(phone: string, since: Date): Promise<number>;
