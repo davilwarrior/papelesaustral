@@ -1,9 +1,9 @@
 import { openai, type OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
 import {
-  experimental_transcribe as transcribe,
   generateText,
   isStepCount,
   type ModelMessage,
+  transcribe,
 } from "ai";
 import { buildAssistantInstructions } from "@/application/chat/assistant-instructions";
 import {
@@ -32,12 +32,13 @@ import {
 } from "./kapso-client";
 import type { WhatsAppAgentEcho, WhatsAppEvent, WhatsAppInbound } from "./kapso-webhook";
 
-const MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-5.4-mini";
-const TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
+const MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-6-luna";
+const TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-transcribe";
 /** Vocabulario del negocio para que la transcripción acierte nombres de materiales. */
 const TRANSCRIBE_PROMPT =
   "Cliente de Papeles Austral (Cuenca, Ecuador) pidiendo papel: dúplex, couché, bond, kraft, cartulina, " +
-  "cartón gris, adhesivo, antigrasa, gramaje, pliegos, paquetes, 70x100, 65x90.";
+  "cartón gris, adhesivo, antigrasa, gramaje, pliegos, paquetes, medidas como 70x100 y 65x90. " +
+  "Ciudades: Cuenca, Azogues, Cañar, Gualaceo, Paute, Loja, Machala.";
 /** Origen público de la web para los archivos (con www: el dominio sin www redirige). */
 const PUBLIC_ORIGIN = process.env.PUBLIC_SITE_ORIGIN || "https://www.papelesaustral.com";
 /** Mensajes de historial que se envían al modelo. */
@@ -185,7 +186,8 @@ async function transcribeVoiceNote(audioId: string, fallback: string): Promise<s
     const result = await transcribe({
       model: openai.transcription(TRANSCRIBE_MODEL),
       audio: data,
-      providerOptions: { openai: { language: "es", prompt: TRANSCRIBE_PROMPT } },
+      // gpt-transcribe solo acepta "json" o "text" (el SDK pide "verbose_json" por defecto).
+      providerOptions: { openai: { language: "es", responseFormat: "json", prompt: TRANSCRIBE_PROMPT } },
     });
     const text = result.text.trim();
     return text ? `(Nota de voz) ${text}` : fallback;

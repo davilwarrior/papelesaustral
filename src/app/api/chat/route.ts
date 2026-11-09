@@ -20,7 +20,7 @@ import { catalogRepository, siteConfigRepository } from "@/infrastructure/contai
 
 export const maxDuration = 60;
 
-const MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-5.4-mini";
+const MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-6-luna";
 /** Mensajes de historial que se envían al modelo; los más antiguos se descartan. */
 const HISTORY_LIMIT = 24;
 const MAX_MESSAGE_CHARS = 1500;
