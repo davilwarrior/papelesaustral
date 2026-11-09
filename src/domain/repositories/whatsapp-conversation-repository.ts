@@ -42,5 +42,9 @@ export interface WhatsAppConversationRepository {
   /** Id del último mensaje del cliente, para saber si llegó otro mientras se respondía. */
   lastUserMessageId(phone: string): Promise<number | null>;
   countUserMessagesSince(phone: string, since: Date): Promise<number>;
+  /** Si el bot ya le respondió alguna vez a este número (para el aviso de privacidad). */
+  hasBotReplied(phone: string): Promise<boolean>;
+  /** Borra conversaciones (y sus mensajes) sin actividad desde la fecha; devuelve cuántas. */
+  deleteInactiveSince(date: Date): Promise<number>;
   update(phone: string, changes: WhatsAppConversationChanges): Promise<void>;
 }

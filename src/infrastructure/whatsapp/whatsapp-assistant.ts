@@ -1,10 +1,5 @@
 import { openai, type OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
-import {
-  generateText,
-  isStepCount,
-  type ModelMessage,
-  transcribe,
-} from "ai";
+import { generateText, isStepCount, type ModelMessage, transcribe } from "ai";
 import { buildAssistantInstructions } from "@/application/chat/assistant-instructions";
 import {
   createWhatsAppTools,
@@ -22,6 +17,7 @@ import {
   whatsappConversationRepository as conversations,
 } from "../container";
 import { PRICE_LIST_PATHS } from "../price-list";
+import { notifyAdvisor } from "./advisor-notification";
 import { describeBusinessHours } from "./business-hours";
 import {
   downloadWhatsAppMedia,
@@ -49,6 +45,10 @@ const HISTORY_HOURS = 24;
 const MAX_USER_MESSAGES_PER_HOUR = 40;
 const FALLBACK_REPLY =
   "Disculpa, no pude responder en este momento. Un asesor revisará tu mensaje y te escribirá pronto.";
+/** Se agrega a la primera respuesta del bot a cada número (Ley de Protección de Datos). */
+export const PRIVACY_NOTICE =
+  "_Te atiende el asistente virtual de Papeles Austral, con inteligencia artificial. Un asesor revisa cada pedido. " +
+  "Usamos tus datos solo para atender tu consulta._";
 
 function hoursFromEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -64,26 +64,57 @@ const addHours = (date: Date, hours: number) => new Date(date.getTime() + hours 
 /** Número parcialmente oculto para los logs. */
 const maskPhone = (phone: string) => `${phone.slice(0, 5)}…${phone.slice(-2)}`;
 
+/** Canal de salida. En producción es Kapso; las simulaciones usan uno falso. */
+export interface WhatsAppMessenger {
+  markReadAndShowTyping(messageId: string): Promise<void>;
+  sendText(to: string, text: string): Promise<string | null>;
+  sendButtons(to: string, text: string, titles: readonly string[]): Promise<string | null>;
+  sendDocument(to: string, document: { link: string; filename: string }): Promise<string | null>;
+  downloadMedia(mediaId: string): Promise<{ data: Uint8Array; mimeType: string }>;
+}
+
+export const kapsoMessenger: WhatsAppMessenger = {
+  markReadAndShowTyping,
+  sendText: sendWhatsAppText,
+  sendButtons: sendWhatsAppButtons,
+  sendDocument: sendWhatsAppDocument,
+  downloadMedia: downloadWhatsAppMedia,
+};
+
+export interface HandleOptions {
+  readonly messenger?: WhatsAppMessenger;
+  /** Hora actual; las simulaciones la cambian para probar el horario de atención. */
+  readonly now?: Date;
+  /** Aviso al asesor; por defecto, correo con Resend si está configurado. */
+  readonly notify?: typeof notifyAdvisor;
+}
+
 /** Procesa los eventos de un webhook: cada número en paralelo, sin que un error afecte a otro. */
-export async function handleWhatsAppEvents(events: readonly WhatsAppEvent[]): Promise<void> {
+export async function handleWhatsAppEvents(
+  events: readonly WhatsAppEvent[],
+  options: HandleOptions = {},
+): Promise<void> {
   const byPhone = new Map<string, WhatsAppEvent[]>();
   for (const event of events) byPhone.set(event.phone, [...(byPhone.get(event.phone) ?? []), event]);
 
   await Promise.all(
     [...byPhone].map(([phone, phoneEvents]) =>
-      handleConversation(phone, phoneEvents).catch((error) =>
+      handleConversation(phone, phoneEvents, options).catch((error) =>
         console.error(`[whatsapp] Error con ${maskPhone(phone)}`, error),
       ),
     ),
   );
 }
 
-async function handleConversation(phone: string, events: readonly WhatsAppEvent[]) {
+async function handleConversation(
+  phone: string,
+  events: readonly WhatsAppEvent[],
+  { messenger = kapsoMessenger, now = new Date(), notify = notifyAdvisor }: HandleOptions,
+) {
   const inbound = events.filter((e): e is WhatsAppInbound => e.kind === "inbound");
   const echoes = events.filter((e): e is WhatsAppAgentEcho => e.kind === "agent_echo");
   const contactName = inbound.find((e) => e.contactName)?.contactName ?? null;
   const conversation = await conversations.getOrCreate(phone, contactName);
-  const now = new Date();
   let pausedUntil = conversation.botPausedUntil;
 
   // Un asesor escribió desde la app: el bot se calla en este chat por un rato.
@@ -109,15 +140,14 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
       role: "user",
       content: message.text,
     });
+    if (id === null) continue;
     // Se transcribe solo después de guardar, para no pagar dos veces si Kapso reintenta.
-    if (id !== null && message.audioId) {
-      const transcript = await transcribeVoiceNote(message.audioId);
+    if (message.audioId) {
+      const transcript = await transcribeVoiceNote(messenger, message.audioId);
       if (transcript) await conversations.updateMessageContent(id, transcript);
     }
-    if (id !== null) {
-      lastSavedId = id;
-      lastMessageId = message.id;
-    }
+    lastSavedId = id;
+    lastMessageId = message.id;
   }
   if (lastSavedId === null || lastMessageId === null) return;
 
@@ -128,13 +158,14 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
     return;
   }
 
-  markReadAndShowTyping(lastMessageId).catch((error) =>
-    console.warn("[whatsapp] No se pudo marcar como leído", error),
-  );
+  messenger
+    .markReadAndShowTyping(lastMessageId)
+    .catch((error) => console.warn("[whatsapp] No se pudo marcar como leído", error));
 
+  const firstReply = !(await conversations.hasBotReplied(phone));
   let reply: GeneratedReply;
   try {
-    reply = await generateReply(conversation);
+    reply = await generateReply(conversation, now);
   } catch (error) {
     console.error("[whatsapp] Error al generar la respuesta", error);
     reply = { text: FALLBACK_REPLY, cart: conversation.cart, handoff: null, priceLists: [], buttons: [] };
@@ -147,29 +178,28 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
     conversations.saveMessage(phone, { waMessageId, role: "assistant", content });
 
   if (reply.handoff?.orderSummary) {
-    await save(await sendWhatsAppText(phone, reply.handoff.orderSummary), reply.handoff.orderSummary);
+    await save(await messenger.sendText(phone, reply.handoff.orderSummary), reply.handoff.orderSummary);
   }
   if (reply.text) {
+    const text = firstReply ? `${reply.text}\n\n${PRIVACY_NOTICE}` : reply.text;
     let buttons = reply.buttons;
     let waMessageId: string | null;
     try {
       waMessageId =
-        buttons.length > 0
-          ? await sendWhatsAppButtons(phone, reply.text, buttons)
-          : await sendWhatsAppText(phone, reply.text);
+        buttons.length > 0 ? await messenger.sendButtons(phone, text, buttons) : await messenger.sendText(phone, text);
     } catch (error) {
       if (buttons.length === 0) throw error;
       // Si WhatsApp rechaza los botones, el cliente igual recibe la respuesta.
       console.warn("[whatsapp] No se pudieron enviar los botones; se envía solo el texto", error);
       buttons = [];
-      waMessageId = await sendWhatsAppText(phone, reply.text);
+      waMessageId = await messenger.sendText(phone, text);
     }
     const buttonsNote = buttons.length > 0 ? `\n[Botones: ${buttons.join(" | ")}]` : "";
-    await save(waMessageId, reply.text + buttonsNote);
+    await save(waMessageId, text + buttonsNote);
   }
   for (const format of reply.priceLists) {
     const filename = format === "pdf" ? "Lista de precios Papeles Austral.pdf" : "Lista de precios Papeles Austral.xlsx";
-    const waMessageId = await sendWhatsAppDocument(phone, {
+    const waMessageId = await messenger.sendDocument(phone, {
       link: `${PUBLIC_ORIGIN}${PRICE_LIST_PATHS[format]}`,
       filename,
     });
@@ -179,12 +209,18 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
   await conversations.update(phone, {
     // El pedido ya quedó en el chat para el asesor: el próximo empieza vacío.
     cart: reply.handoff?.reason === "pedido" ? {} : reply.cart,
-    ...(reply.handoff
-      ? { botPausedUntil: addHours(new Date(), HANDOFF_PAUSE_HOURS), lastHandoffAt: new Date() }
-      : {}),
+    ...(reply.handoff ? { botPausedUntil: addHours(now, HANDOFF_PAUSE_HOURS), lastHandoffAt: now } : {}),
   });
+
   if (reply.handoff) {
     console.info(`[whatsapp] Conversación pasada a asesor (${reply.handoff.reason})`, maskPhone(phone));
+    const recent = await conversations.recentMessages(phone, 12, addHours(new Date(), -HISTORY_HOURS));
+    await notify({
+      phone,
+      contactName: conversation.contactName,
+      handoff: reply.handoff,
+      recentMessages: recent,
+    }).catch((error) => console.error("[whatsapp] No se pudo avisar al asesor", error));
   }
 }
 
@@ -197,9 +233,9 @@ interface GeneratedReply {
 }
 
 /** Transcribe una nota de voz; si falla devuelve null y el modelo ve el aviso de que llegó un audio. */
-async function transcribeVoiceNote(audioId: string): Promise<string | null> {
+async function transcribeVoiceNote(messenger: WhatsAppMessenger, audioId: string): Promise<string | null> {
   try {
-    const { data } = await downloadWhatsAppMedia(audioId);
+    const { data } = await messenger.downloadMedia(audioId);
     const result = await transcribe({
       model: openai.transcription(TRANSCRIBE_MODEL),
       audio: data,
@@ -214,11 +250,12 @@ async function transcribeVoiceNote(audioId: string): Promise<string | null> {
   }
 }
 
-async function generateReply(conversation: WhatsAppConversation): Promise<GeneratedReply> {
+async function generateReply(conversation: WhatsAppConversation, now: Date): Promise<GeneratedReply> {
   const [site, catalog, categories, history] = await Promise.all([
     getSiteConfig(siteConfigRepository),
     loadCachedCatalog(),
     getCategories(catalogRepository),
+    // Reloj real (no `now`): las fechas de los mensajes las pone la base de datos.
     conversations.recentMessages(conversation.phone, HISTORY_LIMIT, addHours(new Date(), -HISTORY_HOURS)),
   ]);
 
@@ -242,24 +279,36 @@ async function generateReply(conversation: WhatsAppConversation): Promise<Genera
 
   const instructions =
     buildAssistantInstructions({ site, catalog, categories, cartItems: cart.size, channel: "whatsapp" }) +
-    `\n${describeBusinessHours(new Date())}` +
+    `\n${describeBusinessHours(now)}` +
     (conversation.contactName ? `\nNombre del perfil de WhatsApp del cliente: ${conversation.contactName}` : "");
 
-  const result = await generateText({
+  const settings = {
     model: openai(MODEL),
     instructions,
-    messages,
-    tools,
-    stopWhen: isStepCount(6),
     reasoning: "low",
     maxOutputTokens: 1200,
     providerOptions: {
       openai: { store: false, textVerbosity: "low" } satisfies OpenAILanguageModelResponsesOptions,
     },
-  });
+  } as const;
+  const result = await generateText({ ...settings, messages, tools, stopWhen: isStepCount(6) });
+  // El modelo a veces escribe la respuesta junto con mostrar_botones y el último paso queda vacío:
+  // se usa el último texto que haya escrito en cualquier paso.
+  let text = result.steps.map((step) => step.text.trim()).filter(Boolean).at(-1) ?? "";
+
+  // Si no escribió nada en ningún paso, se le pide solo el texto final.
+  if (!text) {
+    const followUp = await generateText({
+      ...settings,
+      messages: [...messages, ...result.response.messages],
+      tools,
+      toolChoice: "none",
+    });
+    text = followUp.text.trim();
+  }
 
   return {
-    text: result.text.trim(),
+    text,
     cart: Object.fromEntries(cart),
     handoff,
     priceLists: [...priceLists],

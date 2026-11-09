@@ -183,8 +183,10 @@ export function createAssistantTools({ catalog, whatsappNumber, cart }: Assistan
 /** Datos con los que el bot de WhatsApp pasa la conversación a un asesor. */
 export interface WhatsAppHandoff {
   readonly reason: "pedido" | "consulta" | "solicitud_cliente";
-  /** Texto del pedido para el asesor; null si no hay productos. */
+  /** Texto del pedido (se envía también al cliente); null si no hay productos. */
   readonly orderSummary: string | null;
+  /** Resumen de lo que necesita el cliente, solo para el asesor. */
+  readonly notes: string | null;
 }
 
 export type PriceListFormat = "pdf" | "xlsx";
@@ -239,18 +241,28 @@ export function createWhatsAppTools({
 
     pasar_a_asesor: tool({
       description:
-        "Pasa la conversación a un asesor humano en este mismo chat. Úsalo cuando el cliente confirmó su pedido " +
-        "(y te dio al menos su nombre), cuando pide hablar con una persona, o cuando pregunta algo que no puedes " +
-        "resolver (stock, envío, pagos, descuentos, crédito, facturación). Después de usarlo ya no respondes más.",
+        "Pasa la conversación a un asesor humano en este mismo chat; después ya no respondes más. Úsalo: " +
+        '"pedido" cuando el cliente confirmó su pedido y te dio al menos su nombre; "solicitud_cliente" en cuanto ' +
+        'pide hablar con una persona; "consulta" solo cuando ofreciste pasarlo con un asesor por algo que no puedes ' +
+        "resolver (stock, envío, pagos, descuentos, crédito, facturación) y el cliente aceptó.",
       inputSchema: z.object({
         motivo: z.enum(["pedido", "consulta", "solicitud_cliente"]),
         nombre: z.string().max(100).optional(),
         empresa: z.string().max(120).optional(),
         rucOCedula: z.string().max(20).optional(),
         ciudad: z.string().max(60).optional(),
-        notas: z.string().max(400).optional().describe("Resumen breve de lo que necesita el cliente"),
+        notas: z
+          .string()
+          .max(400)
+          .optional()
+          .describe("Indicaciones que el cliente dio para su pedido (entrega, horario, corte), con sus palabras. Solo si las dio."),
+        resumenParaAsesor: z
+          .string()
+          .max(400)
+          .optional()
+          .describe("Una o dos frases para el asesor sobre qué necesita el cliente. El cliente no lo ve."),
       }),
-      execute: async ({ motivo, nombre, empresa, rucOCedula, ciudad, notas }) => {
+      execute: async ({ motivo, nombre, empresa, rucOCedula, ciudad, notas, resumenParaAsesor }) => {
         const lines = cartLines(cart, byCode);
         if (motivo === "pedido" && (lines.length === 0 || !nombre)) {
           return {
@@ -267,10 +279,8 @@ export function createWhatsAppTools({
                 city: ciudad,
                 notes: notas,
               }).replace("Hola, quiero cotizar este pedido desde el cotizador web:", "Pedido armado con el asistente:")
-            : notas
-              ? `Consulta para el asesor: ${notas}`
-              : null;
-        onHandoff({ reason: motivo, orderSummary });
+            : null;
+        onHandoff({ reason: motivo, orderSummary, notes: resumenParaAsesor?.trim() || null });
         return { listo: true as const, pedido: lines.length > 0 ? summarize(lines) : null };
       },
     }),

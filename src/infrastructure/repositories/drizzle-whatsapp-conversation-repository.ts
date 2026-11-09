@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, lt, sql } from "drizzle-orm";
 import type {
   NewWhatsAppMessage,
   WhatsAppConversation,
@@ -86,6 +86,24 @@ export class DrizzleWhatsAppConversationRepository implements WhatsAppConversati
         ),
       );
     return row?.total ?? 0;
+  }
+
+  async hasBotReplied(phone: string): Promise<boolean> {
+    const [row] = await getDb()
+      .select({ id: whatsappMessages.id })
+      .from(whatsappMessages)
+      .where(and(eq(whatsappMessages.phone, phone), eq(whatsappMessages.role, "assistant")))
+      .limit(1);
+    return row !== undefined;
+  }
+
+  async deleteInactiveSince(date: Date): Promise<number> {
+    // Los mensajes se borran en cascada con la conversación.
+    const rows = await getDb()
+      .delete(whatsappConversations)
+      .where(lt(whatsappConversations.updatedAt, date))
+      .returning({ phone: whatsappConversations.phone });
+    return rows.length;
   }
 
   async update(phone: string, changes: WhatsAppConversationChanges): Promise<void> {
