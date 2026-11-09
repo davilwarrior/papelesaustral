@@ -159,7 +159,8 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
   }
 
   await conversations.update(phone, {
-    cart: reply.cart,
+    // El pedido ya quedó en el chat para el asesor: el próximo empieza vacío.
+    cart: reply.handoff?.reason === "pedido" ? {} : reply.cart,
     ...(reply.handoff
       ? { botPausedUntil: addHours(new Date(), HANDOFF_PAUSE_HOURS), lastHandoffAt: new Date() }
       : {}),
