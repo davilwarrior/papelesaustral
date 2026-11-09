@@ -11,6 +11,8 @@ export interface WhatsAppInbound {
   readonly contactName: string | null;
   /** Texto para el modelo (transcripción, pie de foto o una descripción si no hay texto). */
   readonly text: string;
+  /** Nota de voz sin transcripción de Kapso: hay que descargarla y transcribirla. */
+  readonly audioId: string | null;
 }
 
 /** Mensaje que escribió un asesor desde la app WhatsApp Business (modo dual). */
@@ -29,6 +31,7 @@ interface KapsoMessage {
   from?: string;
   to?: string;
   text?: { body?: string };
+  audio?: { id?: string };
   image?: { caption?: string };
   video?: { caption?: string };
   document?: { caption?: string; filename?: string };
@@ -96,12 +99,14 @@ function toEvent(item: KapsoItem, eventType: string | null): WhatsAppEvent | nul
   const phone = digits(item.conversation?.phone_number ?? message.from);
   const text = messageText(message);
   if (!phone || !text) return null;
+  const needsTranscript = message.type === "audio" && !message.kapso?.transcript?.text?.trim();
   return {
     kind: "inbound",
     id: message.id,
     phone,
     contactName: item.conversation?.contact_name?.trim() || null,
     text,
+    audioId: needsTranscript ? (message.audio?.id ?? null) : null,
   };
 }
 

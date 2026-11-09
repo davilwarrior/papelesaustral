@@ -187,16 +187,55 @@ export interface WhatsAppHandoff {
   readonly orderSummary: string | null;
 }
 
+export type PriceListFormat = "pdf" | "xlsx";
+
+/** WhatsApp limita los botones de respuesta a 3, de 20 caracteres cada uno. */
+export const MAX_REPLY_BUTTONS = 3;
+export const MAX_BUTTON_TITLE = 20;
+
 interface WhatsAppToolsContext extends CatalogToolsContext {
   readonly onHandoff: (handoff: WhatsAppHandoff) => void;
+  readonly onPriceList: (format: PriceListFormat) => void;
+  readonly onButtons: (titles: readonly string[]) => void;
 }
 
 /** Herramientas del bot de WhatsApp: el cliente ya está en el chat, así que se pasa a un asesor. */
-export function createWhatsAppTools({ catalog, cart, onHandoff }: WhatsAppToolsContext) {
+export function createWhatsAppTools({
+  catalog,
+  cart,
+  onHandoff,
+  onPriceList,
+  onButtons,
+}: WhatsAppToolsContext) {
   const byCode = new Map(catalog.products.map((p) => [p.code, p]));
 
   return {
     ...createCatalogTools({ catalog, cart }),
+
+    enviar_lista_precios: tool({
+      description:
+        "Envía al cliente, en este chat, la lista de precios completa y actualizada como archivo. " +
+        "Úsalo cuando pida la lista, el catálogo o todos los precios. PDF por defecto; Excel solo si lo pide.",
+      inputSchema: z.object({ formato: z.enum(["pdf", "xlsx"]).default("pdf") }),
+      execute: async ({ formato }) => {
+        onPriceList(formato);
+        return { enviado: true, formato, nota: "El archivo se envía después de tu mensaje." };
+      },
+    }),
+
+    mostrar_botones: tool({
+      description:
+        `Agrega hasta ${MAX_REPLY_BUTTONS} botones de respuesta rápida debajo de tu mensaje para que el cliente toque ` +
+        `en vez de escribir (máximo ${MAX_BUTTON_TITLE} caracteres cada uno). Úsalo al pedir confirmación del pedido ` +
+        '(ej.: "Confirmar pedido", "Cambiar algo") o para elegir entre pocas opciones cortas. No lo uses en cada mensaje.',
+      inputSchema: z.object({
+        opciones: z.array(z.string().min(1).max(MAX_BUTTON_TITLE)).min(1).max(MAX_REPLY_BUTTONS),
+      }),
+      execute: async ({ opciones }) => {
+        onButtons(opciones);
+        return { listo: true };
+      },
+    }),
 
     pasar_a_asesor: tool({
       description:

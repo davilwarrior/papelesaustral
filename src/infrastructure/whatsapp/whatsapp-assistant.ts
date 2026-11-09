@@ -1,9 +1,15 @@
 import { openai, type OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
-import { generateText, isStepCount, type ModelMessage } from "ai";
+import {
+  experimental_transcribe as transcribe,
+  generateText,
+  isStepCount,
+  type ModelMessage,
+} from "ai";
 import { buildAssistantInstructions } from "@/application/chat/assistant-instructions";
 import {
   createWhatsAppTools,
   sanitizeCart,
+  type PriceListFormat,
   type WhatsAppHandoff,
 } from "@/application/chat/assistant-tools";
 import { getCategories } from "@/application/use-cases/get-categories";
@@ -15,10 +21,25 @@ import {
   siteConfigRepository,
   whatsappConversationRepository as conversations,
 } from "../container";
-import { markReadAndShowTyping, sendWhatsAppText } from "./kapso-client";
+import { PRICE_LIST_PATHS } from "../price-list";
+import { describeBusinessHours } from "./business-hours";
+import {
+  downloadWhatsAppMedia,
+  markReadAndShowTyping,
+  sendWhatsAppButtons,
+  sendWhatsAppDocument,
+  sendWhatsAppText,
+} from "./kapso-client";
 import type { WhatsAppAgentEcho, WhatsAppEvent, WhatsAppInbound } from "./kapso-webhook";
 
 const MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-5.4-mini";
+const TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
+/** Vocabulario del negocio para que la transcripción acierte nombres de materiales. */
+const TRANSCRIBE_PROMPT =
+  "Cliente de Papeles Austral (Cuenca, Ecuador) pidiendo papel: dúplex, couché, bond, kraft, cartulina, " +
+  "cartón gris, adhesivo, antigrasa, gramaje, pliegos, paquetes, 70x100, 65x90.";
+/** Origen público de la web para los archivos (con www: el dominio sin www redirige). */
+const PUBLIC_ORIGIN = process.env.PUBLIC_SITE_ORIGIN || "https://www.papelesaustral.com";
 /** Mensajes de historial que se envían al modelo. */
 const HISTORY_LIMIT = 24;
 /** Freno contra abusos: por encima de esto el bot deja de responder a ese número durante la hora. */
@@ -83,7 +104,7 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
     const id = await conversations.saveMessage(phone, {
       waMessageId: message.id,
       role: "user",
-      content: message.text,
+      content: message.audioId ? await transcribeVoiceNote(message.audioId, message.text) : message.text,
     });
     if (id !== null) {
       lastSavedId = id;
@@ -108,16 +129,33 @@ async function handleConversation(phone: string, events: readonly WhatsAppEvent[
     reply = await generateReply(conversation);
   } catch (error) {
     console.error("[whatsapp] Error al generar la respuesta", error);
-    reply = { text: FALLBACK_REPLY, cart: conversation.cart, handoff: null };
+    reply = { text: FALLBACK_REPLY, cart: conversation.cart, handoff: null, priceLists: [], buttons: [] };
   }
 
   // Si el cliente escribió otra vez mientras se generaba, responde el proceso de ese mensaje.
   if ((await conversations.lastUserMessageId(phone)) !== lastSavedId) return;
 
-  const outgoing = [reply.handoff?.orderSummary, reply.text].filter((t): t is string => !!t);
-  for (const text of outgoing) {
-    const waMessageId = await sendWhatsAppText(phone, text);
-    await conversations.saveMessage(phone, { waMessageId, role: "assistant", content: text });
+  const save = (waMessageId: string | null, content: string) =>
+    conversations.saveMessage(phone, { waMessageId, role: "assistant", content });
+
+  if (reply.handoff?.orderSummary) {
+    await save(await sendWhatsAppText(phone, reply.handoff.orderSummary), reply.handoff.orderSummary);
+  }
+  if (reply.text) {
+    const waMessageId =
+      reply.buttons.length > 0
+        ? await sendWhatsAppButtons(phone, reply.text, reply.buttons)
+        : await sendWhatsAppText(phone, reply.text);
+    const buttons = reply.buttons.length > 0 ? `\n[Botones: ${reply.buttons.join(" | ")}]` : "";
+    await save(waMessageId, reply.text + buttons);
+  }
+  for (const format of reply.priceLists) {
+    const filename = format === "pdf" ? "Lista de precios Papeles Austral.pdf" : "Lista de precios Papeles Austral.xlsx";
+    const waMessageId = await sendWhatsAppDocument(phone, {
+      link: `${PUBLIC_ORIGIN}${PRICE_LIST_PATHS[format]}`,
+      filename,
+    });
+    await save(waMessageId, `[Archivo enviado: ${filename}]`);
   }
 
   await conversations.update(phone, {
@@ -135,6 +173,25 @@ interface GeneratedReply {
   readonly text: string;
   readonly cart: Readonly<Record<string, number>>;
   readonly handoff: WhatsAppHandoff | null;
+  readonly priceLists: readonly PriceListFormat[];
+  readonly buttons: readonly string[];
+}
+
+/** Transcribe una nota de voz; si falla, el modelo recibe el aviso de que llegó un audio. */
+async function transcribeVoiceNote(audioId: string, fallback: string): Promise<string> {
+  try {
+    const { data } = await downloadWhatsAppMedia(audioId);
+    const result = await transcribe({
+      model: openai.transcription(TRANSCRIBE_MODEL),
+      audio: data,
+      providerOptions: { openai: { language: "es", prompt: TRANSCRIBE_PROMPT } },
+    });
+    const text = result.text.trim();
+    return text ? `(Nota de voz) ${text}` : fallback;
+  } catch (error) {
+    console.warn("[whatsapp] No se pudo transcribir la nota de voz", error);
+    return fallback;
+  }
 }
 
 async function generateReply(conversation: WhatsAppConversation): Promise<GeneratedReply> {
@@ -147,7 +204,15 @@ async function generateReply(conversation: WhatsAppConversation): Promise<Genera
 
   const cart = sanitizeCart(conversation.cart, new Map(catalog.products.map((p) => [p.code, p])));
   let handoff = null as WhatsAppHandoff | null;
-  const tools = createWhatsAppTools({ catalog, cart, onHandoff: (h) => (handoff = h) });
+  const priceLists = new Set<PriceListFormat>();
+  let buttons: readonly string[] = [];
+  const tools = createWhatsAppTools({
+    catalog,
+    cart,
+    onHandoff: (h) => (handoff = h),
+    onPriceList: (format) => priceLists.add(format),
+    onButtons: (titles) => (buttons = titles),
+  });
 
   const messages: ModelMessage[] = history.map((m) =>
     m.role === "user"
@@ -157,6 +222,7 @@ async function generateReply(conversation: WhatsAppConversation): Promise<Genera
 
   const instructions =
     buildAssistantInstructions({ site, catalog, categories, cartItems: cart.size, channel: "whatsapp" }) +
+    `\n${describeBusinessHours(new Date())}` +
     (conversation.contactName ? `\nNombre del perfil de WhatsApp del cliente: ${conversation.contactName}` : "");
 
   const result = await generateText({
@@ -172,5 +238,12 @@ async function generateReply(conversation: WhatsAppConversation): Promise<Genera
     },
   });
 
-  return { text: result.text.trim(), cart: Object.fromEntries(cart), handoff };
+  return {
+    text: result.text.trim(),
+    cart: Object.fromEntries(cart),
+    handoff,
+    priceLists: [...priceLists],
+    // Sin botones al pasar a un asesor: la conversación ya no sigue con el bot.
+    buttons: handoff ? [] : buttons,
+  };
 }
