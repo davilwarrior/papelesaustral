@@ -1,9 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { after } from "next/server";
+import { parseKapsoWebhook } from "@/infrastructure/whatsapp/kapso-webhook";
+import { handleWhatsAppEvents } from "@/infrastructure/whatsapp/whatsapp-assistant";
 
 /**
- * Webhook de WhatsApp (Kapso, tipo "Meta webhooks": reenvía los eventos de Meta tal cual).
- * Por ahora solo valida la firma y registra el tipo de evento; el asistente se conecta después.
+ * Webhook de WhatsApp (Kapso, formato propio con mensajes agrupados).
+ * Responde 200 enseguida (Kapso espera máximo 10 s) y genera la respuesta del bot después, con after().
  */
+export const maxDuration = 60;
 
 /** Quita espacios y comillas que se cuelan al copiar el valor desde el .env. */
 function cleanSecret(value: string | null | undefined): string {
@@ -17,26 +21,6 @@ function hasValidSignature(rawBody: string, signature: string | null, secret: st
   const a = Buffer.from(received);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
-}
-
-interface MetaWebhookPayload {
-  object?: string;
-  entry?: { changes?: { field?: string; value?: Record<string, unknown> }[] }[];
-}
-
-/** Resumen sin contenido de mensajes ni números de clientes (datos personales). */
-function summarize(payload: MetaWebhookPayload) {
-  return (payload.entry ?? []).flatMap((entry) =>
-    (entry.changes ?? []).map(({ field, value }) => ({
-      field,
-      messages: Array.isArray(value?.messages) ? value.messages.length : 0,
-      statuses: Array.isArray(value?.statuses) ? value.statuses.length : 0,
-      echoes: Array.isArray(value?.message_echoes) ? value.message_echoes.length : 0,
-      types: Array.isArray(value?.messages)
-        ? (value.messages as { type?: string }[]).map((m) => m.type)
-        : undefined,
-    })),
-  );
 }
 
 /** Verificación de Meta al registrar el webhook (por si se conecta sin intermediario). */
@@ -71,18 +55,22 @@ export async function POST(request: Request) {
     return Response.json({ ok: false }, { status: 401 });
   }
 
-  let payload: MetaWebhookPayload;
+  let payload: unknown;
   try {
     payload = JSON.parse(rawBody);
   } catch {
     return Response.json({ ok: false }, { status: 400 });
   }
 
+  const eventType = request.headers.get("x-webhook-event");
+  const events = parseKapsoWebhook(payload, eventType, process.env.WHATSAPP_PHONE_NUMBER_ID?.trim());
+  // Sin texto de mensajes ni números en los logs (datos personales).
   console.info("[whatsapp] Evento recibido", {
-    event: request.headers.get("x-webhook-event"),
-    object: payload.object,
-    changes: summarize(payload),
+    event: eventType,
+    inbound: events.filter((e) => e.kind === "inbound").length,
+    agentEchoes: events.filter((e) => e.kind === "agent_echo").length,
   });
 
+  if (events.length > 0) after(() => handleWhatsAppEvents(events));
   return Response.json({ ok: true });
 }

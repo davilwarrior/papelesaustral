@@ -78,3 +78,34 @@ export const syncRuns = pgTable("sync_runs", {
   issues: jsonb("issues").notNull().default([]),
   error: text("error"),
 });
+
+/** Conversaciones de WhatsApp: una por número de cliente. */
+export const whatsappConversations = pgTable("whatsapp_conversations", {
+  /** Número del cliente, solo dígitos con código de país (593...). */
+  phone: text("phone").primaryKey(),
+  contactName: text("contact_name"),
+  /** Pedido en curso: paquetes por código de producto. */
+  cart: jsonb("cart").$type<Record<string, number>>().notNull().default({}),
+  /** El bot no responde hasta esta fecha (atiende un asesor). */
+  botPausedUntil: timestamp("bot_paused_until", { withTimezone: true }),
+  lastHandoffAt: timestamp("last_handoff_at", { withTimezone: true }),
+  ...timestamps,
+});
+
+/** Mensajes de WhatsApp: historial para el modelo y control de duplicados. */
+export const whatsappMessages = pgTable(
+  "whatsapp_messages",
+  {
+    id: serial("id").primaryKey(),
+    phone: text("phone")
+      .notNull()
+      .references(() => whatsappConversations.phone, { onDelete: "cascade" }),
+    /** wamid de Meta; único para ignorar reintentos del webhook. */
+    waMessageId: text("wa_message_id").unique(),
+    /** user = cliente, assistant = bot, agent = asesor desde la app. */
+    role: text("role").$type<"user" | "assistant" | "agent">().notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("whatsapp_messages_phone_created_idx").on(table.phone, table.createdAt)],
+);

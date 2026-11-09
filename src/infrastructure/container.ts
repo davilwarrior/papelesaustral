@@ -1,7 +1,9 @@
 import type { CatalogRepository } from "@/domain/repositories/catalog-repository";
 import type { ProductRepository } from "@/domain/repositories/product-repository";
 import type { SiteConfigRepository } from "@/domain/repositories/site-config-repository";
+import type { WhatsAppConversationRepository } from "@/domain/repositories/whatsapp-conversation-repository";
 import { DrizzleProductRepository } from "./repositories/drizzle-product-repository";
+import { DrizzleWhatsAppConversationRepository } from "./repositories/drizzle-whatsapp-conversation-repository";
 import { StaticCatalogRepository } from "./repositories/static-catalog-repository";
 import { StaticSiteConfigRepository } from "./repositories/static-site-config-repository";
 
@@ -20,3 +22,7 @@ export const siteConfigRepository: SiteConfigRepository =
 /** Catálogo de productos sincronizado desde el Google Sheet a Neon. */
 export const productRepository: ProductRepository =
   new DrizzleProductRepository();
+
+/** Conversaciones del bot de WhatsApp (historial, pedido y pausa por asesor). */
+export const whatsappConversationRepository: WhatsAppConversationRepository =
+  new DrizzleWhatsAppConversationRepository();

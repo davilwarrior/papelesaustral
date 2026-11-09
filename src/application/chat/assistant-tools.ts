@@ -67,14 +67,14 @@ export function sanitizeCart(raw: unknown, byCode: Map<string, Product>): Map<st
   return cart;
 }
 
-interface AssistantToolsContext {
+interface CatalogToolsContext {
   readonly catalog: ProductCatalog;
-  readonly whatsappNumber: string;
-  /** Pedido actual del visitante; las herramientas lo modifican durante la respuesta. */
+  /** Pedido actual del cliente; las herramientas lo modifican durante la respuesta. */
   readonly cart: Map<string, number>;
 }
 
-export function createAssistantTools({ catalog, whatsappNumber, cart }: AssistantToolsContext) {
+/** Herramientas comunes a todos los canales: catálogo y pedido. */
+function createCatalogTools({ catalog, cart }: CatalogToolsContext) {
   const byCode = new Map(catalog.products.map((p) => [p.code, p]));
 
   return {
@@ -133,6 +133,19 @@ export function createAssistantTools({ catalog, whatsappNumber, cart }: Assistan
       inputSchema: z.object({}),
       execute: async () => summarize(cartLines(cart, byCode)),
     }),
+  };
+}
+
+interface AssistantToolsContext extends CatalogToolsContext {
+  readonly whatsappNumber: string;
+}
+
+/** Herramientas del asistente web: el pedido se envía con un botón de WhatsApp. */
+export function createAssistantTools({ catalog, whatsappNumber, cart }: AssistantToolsContext) {
+  const byCode = new Map(catalog.products.map((p) => [p.code, p]));
+
+  return {
+    ...createCatalogTools({ catalog, cart }),
 
     preparar_envio: tool({
       description:
@@ -162,6 +175,64 @@ export function createAssistantTools({ catalog, whatsappNumber, cart }: Assistan
           whatsappUrl: buildWhatsAppQuoteUrl(whatsappNumber, message),
           pedido: summarize(lines),
         };
+      },
+    }),
+  };
+}
+
+/** Datos con los que el bot de WhatsApp pasa la conversación a un asesor. */
+export interface WhatsAppHandoff {
+  readonly reason: "pedido" | "consulta" | "solicitud_cliente";
+  /** Texto del pedido para el asesor; null si no hay productos. */
+  readonly orderSummary: string | null;
+}
+
+interface WhatsAppToolsContext extends CatalogToolsContext {
+  readonly onHandoff: (handoff: WhatsAppHandoff) => void;
+}
+
+/** Herramientas del bot de WhatsApp: el cliente ya está en el chat, así que se pasa a un asesor. */
+export function createWhatsAppTools({ catalog, cart, onHandoff }: WhatsAppToolsContext) {
+  const byCode = new Map(catalog.products.map((p) => [p.code, p]));
+
+  return {
+    ...createCatalogTools({ catalog, cart }),
+
+    pasar_a_asesor: tool({
+      description:
+        "Pasa la conversación a un asesor humano en este mismo chat. Úsalo cuando el cliente confirmó su pedido " +
+        "(y te dio al menos su nombre), cuando pide hablar con una persona, o cuando pregunta algo que no puedes " +
+        "resolver (stock, envío, pagos, descuentos, crédito, facturación). Después de usarlo ya no respondes más.",
+      inputSchema: z.object({
+        motivo: z.enum(["pedido", "consulta", "solicitud_cliente"]),
+        nombre: z.string().max(100).optional(),
+        empresa: z.string().max(120).optional(),
+        rucOCedula: z.string().max(20).optional(),
+        ciudad: z.string().max(60).optional(),
+        notas: z.string().max(400).optional().describe("Resumen breve de lo que necesita el cliente"),
+      }),
+      execute: async ({ motivo, nombre, empresa, rucOCedula, ciudad, notas }) => {
+        const lines = cartLines(cart, byCode);
+        if (motivo === "pedido" && (lines.length === 0 || !nombre)) {
+          return {
+            listo: false as const,
+            motivo: lines.length === 0 ? "El pedido está vacío." : "Falta el nombre del cliente.",
+          };
+        }
+        const orderSummary =
+          lines.length > 0
+            ? buildQuoteMessage(lines, {
+                name: nombre || "(sin nombre)",
+                company: empresa,
+                taxId: rucOCedula,
+                city: ciudad,
+                notes: notas,
+              }).replace("Hola, quiero cotizar este pedido desde el cotizador web:", "Pedido armado con el asistente:")
+            : notas
+              ? `Consulta para el asesor: ${notas}`
+              : null;
+        onHandoff({ reason: motivo, orderSummary });
+        return { listo: true as const, pedido: lines.length > 0 ? summarize(lines) : null };
       },
     }),
   };

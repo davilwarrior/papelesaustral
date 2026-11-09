@@ -14,14 +14,9 @@ import {
   type AssistantUIMessage,
 } from "@/application/chat/assistant-tools";
 import { getCategories } from "@/application/use-cases/get-categories";
-import { getProductCatalog } from "@/application/use-cases/get-product-catalog";
 import { getSiteConfig } from "@/application/use-cases/get-site-config";
-import type { ProductCatalog } from "@/domain/repositories/product-repository";
-import {
-  catalogRepository,
-  productRepository,
-  siteConfigRepository,
-} from "@/infrastructure/container";
+import { loadCachedCatalog } from "@/infrastructure/cached-catalog";
+import { catalogRepository, siteConfigRepository } from "@/infrastructure/container";
 
 export const maxDuration = 60;
 
@@ -42,18 +37,6 @@ function isRateLimited(ip: string): boolean {
   requestsByIp.set(ip, recent);
   if (requestsByIp.size > 5000) requestsByIp.clear();
   return recent.length > RATE_LIMIT;
-}
-
-/** El catálogo cambia solo al sincronizar el Sheet; 5 minutos evita una consulta por mensaje. */
-let catalogCache: { value: Promise<ProductCatalog>; at: number } | null = null;
-
-function loadCatalog(): Promise<ProductCatalog> {
-  if (!catalogCache || Date.now() - catalogCache.at > 5 * 60_000) {
-    const value = getProductCatalog(productRepository);
-    value.catch(() => (catalogCache = null));
-    catalogCache = { value, at: Date.now() };
-  }
-  return catalogCache.value;
 }
 
 function errorResponse(message: string, status: number) {
@@ -87,7 +70,7 @@ export async function POST(request: Request) {
 
   const [site, catalog, categories] = await Promise.all([
     getSiteConfig(siteConfigRepository),
-    loadCatalog(),
+    loadCachedCatalog(),
     getCategories(catalogRepository),
   ]);
 
